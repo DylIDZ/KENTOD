@@ -1,13 +1,12 @@
 --[[
-    Fisch Script - WindUI Version
-    Logic Source: User Provided Fisch.lua (Fluent)
-    UI Library: WindUI
+    Fisch Script - WindUI Version (ROBUST FIX)
+    Fixes: Random stopping, Infinite yields, Thread crashing
 ]]
 
 local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
 
 -- ==========================================
--- 1. SETUP & VARIABLE (DARI SCRIPT ASLI)
+-- 1. SETUP & VARIABLE
 -- ==========================================
 
 if getgenv().LoadedFisch then return end
@@ -16,8 +15,6 @@ getgenv().LoadedFisch = true
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
-local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
@@ -50,8 +47,12 @@ _G.Settings = {
 -- Load/Save System
 getgenv().Load = function()
     if isfile("Hypexz_WindUI_" .. PlayerName .. ".json") then
-        local Decode = HttpService:JSONDecode(readfile("Hypexz_WindUI_" .. PlayerName .. ".json"))
-        for i,v in pairs(Decode) do _G.Settings[i] = v end
+        local success, result = pcall(function()
+            return HttpService:JSONDecode(readfile("Hypexz_WindUI_" .. PlayerName .. ".json"))
+        end)
+        if success then
+            for i,v in pairs(result) do _G.Settings[i] = v end
+        end
     end
 end
 
@@ -65,7 +66,7 @@ getgenv().Load()
 -- Restore Saved Position
 if _G.Settings.Farm.Position and _G.Settings.Farm.Position.X then
     local sp = _G.Settings.Farm.Position
-    savedPosition = CFrame.new(sp.X, sp.Y, sp.Z) * CFrame.Angles(0, sp.Yaw, 0)
+    savedPosition = CFrame.new(sp.X, sp.Y, sp.Z) * CFrame.Angles(0, sp.Yaw or 0, 0)
 end
 
 -- Anti AFK
@@ -76,7 +77,7 @@ LocalPlayer.Idled:connect(function()
 end)
 
 -- ==========================================
--- 2. HELPER FUNCTIONS (DARI SCRIPT ASLI)
+-- 2. HELPER FUNCTIONS
 -- ==========================================
 
 function TP(cframe)
@@ -87,60 +88,33 @@ function TP(cframe)
     end
 end
 
-function TPB(cframe) -- Versi Bypass/Boss
-    if not cframe then return end
-    local char = LocalPlayer.Character
-    if char and char:FindFirstChild("HumanoidRootPart") then
-        char.HumanoidRootPart.CFrame = cframe
-    end
-end
-
 local function TeleportMode()
     local Mode = _G.Settings.Farm.Mode
-    if Mode == "Trash" then
-        return CFrame.new(-1143.8, 134.6, -1080.5)
-    elseif Mode == "Money" then
-        return CFrame.new(-715.6, -864.4, -121.6)
-    elseif Mode == "Level" then
-        return CFrame.new(1376.1, -603.6, 2337.5)
-    elseif Mode == "Enchant Relic" then
-        return CFrame.new(990.9, -737.9, 1465.7)
-    elseif Mode == "Save Position" then
-        return savedPosition
+    if Mode == "Trash" then return CFrame.new(-1143.8, 134.6, -1080.5)
+    elseif Mode == "Money" then return CFrame.new(-715.6, -864.4, -121.6)
+    elseif Mode == "Level" then return CFrame.new(1376.1, -603.6, 2337.5)
+    elseif Mode == "Enchant Relic" then return CFrame.new(990.9, -737.9, 1465.7)
+    elseif Mode == "Save Position" then return savedPosition
     end
     return savedPosition
 end
 
 local function ChangRod(rodName)
-    repeat task.wait() 
-        ReplicatedStorage.packages.Net["RF/Rod/Equip"]:InvokeServer(rodName)
-    until LocalPlayer.Backpack:FindFirstChild(rodName) or Character:FindFirstChild(rodName)
-end
-
-local function CheckInventory(itemName)
-    if not Character:FindFirstChild(itemName) and not LocalPlayer.Backpack:FindFirstChild(itemName) then 
-        return false 
-    end
-    return true
-end
-
-local function CheckBoatSpawn()
-    for i,v in pairs(workspace.active.boats:GetChildren()) do
-        if v.Name == PlayerName then return true end
-    end
-    return false
+    local args = {[1] = rodName}
+    ReplicatedStorage.packages.Net["RF/Rod/Equip"]:InvokeServer(unpack(args))
 end
 
 local function CheckBoss()
-    local Zone = workspace.zones
     local SelectedTable = _G.Settings.Boss.SelectBoss
     if type(SelectedTable) ~= "table" then return nil end
     local bossEventNames = {}
-    for _, name in pairs(SelectedTable) do bossEventNames[name] = true end -- Fix for WindUI Multiselect logic if returning array
+    for _, name in pairs(SelectedTable) do bossEventNames[name] = true end
 
-    for _, obj in ipairs(workspace.zones.fishing:GetChildren()) do
-        if obj:IsA("Part") and bossEventNames[obj.Name] then
-            return obj.Name
+    if workspace:FindFirstChild("zones") and workspace.zones:FindFirstChild("fishing") then
+        for _, obj in ipairs(workspace.zones.fishing:GetChildren()) do
+            if obj:IsA("Part") and bossEventNames[obj.Name] then
+                return obj.Name
+            end
         end
     end
     return nil 
@@ -165,10 +139,10 @@ end
 -- ==========================================
 
 local Window = WindUI:CreateWindow({
-    Title = "Hypexz V2 (WindUI)",
+    Title = "Hypexz V2 (Stable)",
     Folder = "HypexzV2",
     Icon = "fish-symbol",
-    Author = ".ftgs / Hypexz",
+    Author = ".ftgs",
     Size = UDim2.fromOffset(580, 460),
     Transparent = true,
     Theme = "Dark",
@@ -178,7 +152,6 @@ local MainTab = Window:Tab({ Title = "Main", Icon = "home" })
 local RodTab = Window:Tab({ Title = "Rod", Icon = "anchor" })
 local TeleportTab = Window:Tab({ Title = "Teleport", Icon = "map" })
 local ShopTab = Window:Tab({ Title = "Shop", Icon = "shopping-cart" })
-local SettingsTab = Window:Tab({ Title = "Settings", Icon = "settings" })
 
 -- === MAIN TAB ===
 local StatusSection = MainTab:Section({ Title = "Statistics" })
@@ -203,17 +176,18 @@ local FarmSection = MainTab:Section({ Title = "Farming" })
 
 FarmSection:Button({
     Title = "Save Current Position",
-    Desc = "Save position for 'Save Position' mode",
+    Desc = "Required for 'Save Position' mode",
     Callback = function()
-        if HumanoidRootPart then
+        local char = LocalPlayer.Character
+        if char and char:FindFirstChild("HumanoidRootPart") then
             _G.Settings.Farm.Position = {
-                X = HumanoidRootPart.CFrame.X,
-                Y = HumanoidRootPart.CFrame.Y,
-                Z = HumanoidRootPart.CFrame.Z,
-                Yaw = HumanoidRootPart.CFrame:ToEulerAnglesYXZ()
+                X = char.HumanoidRootPart.CFrame.X,
+                Y = char.HumanoidRootPart.CFrame.Y,
+                Z = char.HumanoidRootPart.CFrame.Z,
+                Yaw = char.HumanoidRootPart.CFrame:ToEulerAnglesYXZ()
             }
             getgenv().SaveSetting()
-            savedPosition = HumanoidRootPart.CFrame
+            savedPosition = char.HumanoidRootPart.CFrame
             WindUI:Notify({ Title = "Saved", Content = "Position Saved!", Icon = "check" })
         end
     end
@@ -265,7 +239,7 @@ spawn(function()
     pcall(function()
         local stats = workspace.PlayerStats[PlayerName].T[PlayerName].Boats
         for _,v in pairs(stats:GetChildren()) do table.insert(Myboat,v.Name) end
-        table.sort(Myboat,function(a,b) return a:lower() < b:lower() end)
+        table.sort(Myboat)
     end)
 end)
 
@@ -279,7 +253,6 @@ local BoatDropdown = ConfigSection:Dropdown({
 ConfigSection:Button({
     Title = "Refresh Boats",
     Callback = function()
-        -- Logic refresh manual simple
         Myboat = {}
         local stats = workspace.PlayerStats[PlayerName].T[PlayerName].Boats
         for _,v in pairs(stats:GetChildren()) do table.insert(Myboat,v.Name) end
@@ -350,7 +323,7 @@ table.sort(tpNames)
 local selectedIsland = tpNames[1]
 TpSection:Dropdown({ Title = "Select Location", Values = tpNames, Default = selectedIsland, Callback = function(v) selectedIsland = v end })
 TpSection:Button({ Title = "Teleport", Callback = function() 
-    local hrp = Character.HumanoidRootPart
+    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
     local spot = tpFolder:FindFirstChild(selectedIsland)
     if not spot then
         for _, tp in ipairs(extraTPs) do if tp.Name == selectedIsland then spot = {CFrame = CFrame.new(tp.Position)} break end end
@@ -370,7 +343,6 @@ EnchantSection:Toggle({ Title = "Start Exalted Enchant", Callback = function(v) 
 
 local ServerSection = TeleportTab:Section({ Title = "Server" })
 ServerSection:Button({ Title = "Rejoin Server", Callback = function() game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, game.JobId, game.Players.LocalPlayer) end })
-
 
 -- === SHOP TAB ===
 local TotemSection = ShopTab:Section({ Title = "Totems" })
@@ -399,7 +371,7 @@ DailyShopSection:Dropdown({ Title = "Select Items to Auto Buy", Values = Itemlis
 DailyShopSection:Toggle({ Title = "Auto Buy Daily Shop", Default = _G.Settings.Daily_Shop.Enable, Callback = function(v) _G.Settings.Daily_Shop.Enable = v; getgenv().SaveSetting() end })
 
 -- ==========================================
--- 4. LOGIC LOOPS (WORKHORSE)
+-- 4. LOGIC LOOPS (ROBUST & CRASH PROOF)
 -- ==========================================
 
 -- Platform
@@ -412,7 +384,6 @@ if not workspace:FindFirstChild("Platform") then
     part.Size = Vector3.new(10, 0.5, 10)
 end
 
--- Boss Targets Definition
 local BOSS_TARGETS = {
     ["Elder Mossjaw"] = { cframe = CFrame.new(-4861.78, -1793.96, -10126.14), threshold = 10 },
     ["MossjawHunt"] = { cframe = CFrame.new(-4861.78, -1793.96, -10126.14), threshold = 10 },
@@ -432,31 +403,31 @@ local BOSS_TARGETS = {
 
 local function getBossTargetCFrame(info)
     if info.cframe then return info.cframe end
-    if info.zone then
-        local zone = workspace.zones.fishing:FindFirstChild(info.zone)
-        if zone then return zone.CFrame * CFrame.new(info.offset or Vector3.zero) end
+    if info.zone and workspace.zones.fishing:FindFirstChild(info.zone) then
+        return workspace.zones.fishing[info.zone].CFrame * CFrame.new(info.offset or Vector3.zero)
     end
     return nil
 end
 
-local function handleBossTarget(name, targetCFrame)
+local function handleBossTarget(targetCFrame)
     TP(targetCFrame)
     getgenv().Ready = true
 end
 
--- [LOOP 1] Movement & State Manager
+-- [LOOP 1] MOVEMENT & STATE
 RunService.Heartbeat:Connect(function()
     if not _G.Settings.Farm.Enable then
         getgenv().Ready = false
-        if Character:FindFirstChild("HumanoidRootPart") and Character.HumanoidRootPart:FindFirstChild("BodyVelocity1") then
-             Character.HumanoidRootPart.BodyVelocity1:Destroy()
+        local char = LocalPlayer.Character
+        if char and char:FindFirstChild("HumanoidRootPart") and char.HumanoidRootPart:FindFirstChild("BodyVelocity1") then
+             char.HumanoidRootPart.BodyVelocity1:Destroy()
         end
         return
     end
 
     local pCharacter = LocalPlayer.Character
     if pCharacter and pCharacter:FindFirstChild("HumanoidRootPart") then
-        -- Anti Fall / Noclip
+        -- Anti Fall & Noclip
         if not pCharacter.HumanoidRootPart:FindFirstChild("BodyVelocity1") then
             local bv = Instance.new("BodyVelocity")
             bv.Name = "BodyVelocity1"
@@ -468,19 +439,18 @@ RunService.Heartbeat:Connect(function()
             if v:IsA("BasePart") and v.Name ~= "bobber" then v.CanCollide = false end
         end
 
-        -- Boss Logic
+        -- Logic Selection
         local BossSpawn = CheckBoss() or CheckBoss2()
         local BossInfo = BossSpawn and BOSS_TARGETS[BossSpawn]
         
         if _G.Settings.Boss.Enable and BossSpawn and BossInfo then
              local targetCFrame = getBossTargetCFrame(BossInfo)
              if targetCFrame then
-                 handleBossTarget(BossSpawn, targetCFrame)
+                 handleBossTarget(targetCFrame)
                  return
              end
         end
 
-        -- Standard Farming
         local targetPos = TeleportMode()
         if targetPos then
             TP(targetPos)
@@ -491,15 +461,19 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- [LOOP 2] Fishing Mechanics (Cast/Shake/Reel)
+-- [LOOP 2] FISHING (ANTI-CRASHED)
 task.spawn(function()
     while task.wait() do
-        if getgenv().Ready then
-            local suc, err = pcall(function()
+        if getgenv().Ready and _G.Settings.Farm.Enable then
+            -- Wrap logic in xpcall to prevent thread death from random errors
+            xpcall(function()
+                local char = LocalPlayer.Character
+                if not char then return end
+
                 local ShakeDelay = _G.Settings.Farm.Shake.Delay
                 local ROD_MAIN = _G.Settings.Farm.Rod.FarmRod or "Flimsy Rod"
                 
-                -- Priority Selection logic
+                -- Priority Rod Selection
                 _G.RodSelect = ROD_MAIN
                 local BossSpawn = CheckBoss() or CheckBoss2()
                 if _G.Settings.Boss.Enable and BossSpawn then
@@ -507,17 +481,24 @@ task.spawn(function()
                     if BossSpawn == "Elder Mossjaw" then _G.RodSelect = _G.Settings.Farm.Rod.MossjawRod end
                 end
 
-                -- Equip Logic
-                if not Character:FindFirstChild(_G.RodSelect) then
+                -- Equip Logic with TIMEOUT (Fixes Infinite Yield)
+                if not char:FindFirstChild(_G.RodSelect) then
                     if not LocalPlayer.Backpack:FindFirstChild(_G.RodSelect) then ChangRod(_G.RodSelect) end
-                    repeat RunService.Heartbeat:Wait(1) until LocalPlayer.Backpack:FindFirstChild(_G.RodSelect) or not getgenv().Ready
+                    
+                    local timeout = 0
+                    repeat 
+                        RunService.Heartbeat:Wait()
+                        timeout = timeout + 1
+                        if timeout > 60 then break end -- Break after ~1s to prevent hanging
+                    until LocalPlayer.Backpack:FindFirstChild(_G.RodSelect) or not getgenv().Ready
+                    
                     if LocalPlayer.Backpack:FindFirstChild(_G.RodSelect) then
-                         Character.Humanoid:EquipTool(LocalPlayer.Backpack:FindFirstChild(_G.RodSelect))
+                         char.Humanoid:EquipTool(LocalPlayer.Backpack:FindFirstChild(_G.RodSelect))
                     end
                 end
 
-                local rodCharacter = Character:FindFirstChild(_G.RodSelect)
-                if not rodCharacter then return end
+                local rodCharacter = char:FindFirstChild(_G.RodSelect)
+                if not rodCharacter then return end -- Skip if rod failed to equip
                 
                 local bobber = rodCharacter:FindFirstChild("bobber")
                 local ShakeUi = PlayerGui:FindFirstChild("shakeui")
@@ -548,11 +529,16 @@ task.spawn(function()
                     local playerbar = bar and bar:FindFirstChild("playerbar")
                     if playerbar then
                         playerbar:GetPropertyChangedSignal('Position'):Wait()
-                        task.wait(0.8)
+                        task.wait(0.6) -- Reduced wait slightly for better response
                         ReplicatedStorage.events.reelfinished:FireServer(100, true)
                     end
                 end
+            end, function(err)
+                warn("Fishing Loop Error (Handled):", err)
+                task.wait(1) -- Cool down on error
             end)
+        else
+            task.wait(0.5) -- Idle wait when not ready
         end
     end
 end)
@@ -561,7 +547,7 @@ end)
 spawn(function()
     while task.wait(5) do
         if _G.Settings.Fish.SellAll then
-            ReplicatedStorage.events.SellAll:InvokeServer()
+             pcall(function() ReplicatedStorage.events.SellAll:InvokeServer() end)
         end
     end
 end)
@@ -571,10 +557,11 @@ spawn(function()
     while task.wait(1) do
         if startAutoPlace then
              pcall(function()
+                 local char = LocalPlayer.Character
                  if LocalPlayer.Backpack:FindFirstChild("Crab Cage") then
-                     Character.Humanoid:EquipTool(LocalPlayer.Backpack:FindFirstChild("Crab Cage"))
-                 elseif Character:FindFirstChild("Crab Cage") then
-                     Character["Crab Cage"].Deploy:FireServer(Character.HumanoidRootPart.CFrame)
+                     char.Humanoid:EquipTool(LocalPlayer.Backpack:FindFirstChild("Crab Cage"))
+                 elseif char:FindFirstChild("Crab Cage") then
+                     char["Crab Cage"].Deploy:FireServer(char.HumanoidRootPart.CFrame)
                  end
              end)
         end
@@ -616,7 +603,6 @@ spawn(function()
         if pstartbuy then
              pcall(function()
                  TP(BaitInfo[SelectedBait])
-                 -- Logic interaction simplified for brevity but functional
                  for _, v in pairs(workspace.world.interactables:GetDescendants()) do
                      if v:IsA('Model') and v.Name == SelectedBait then
                          for _, x in pairs(v:GetDescendants()) do
@@ -641,9 +627,10 @@ end)
 spawn(function()
     while RunService.Heartbeat:Wait() do
         if AutoOpenBait then
+            local char = LocalPlayer.Character
             if LocalPlayer.Backpack:FindFirstChild(SelectedBait) then
-                Character.Humanoid:EquipTool(LocalPlayer.Backpack:FindFirstChild(SelectedBait))
-            elseif Character:FindFirstChild(SelectedBait) then
+                char.Humanoid:EquipTool(LocalPlayer.Backpack:FindFirstChild(SelectedBait))
+            elseif char:FindFirstChild(SelectedBait) then
                  VirtualUser:CaptureController()
                  VirtualUser:ClickButton1(Vector2.new(851, 158), workspace.Camera.CFrame)
             else
@@ -663,10 +650,8 @@ spawn(function()
                 for _,v in pairs(list:GetDescendants()) do
                     if v.Name == "Label" and v:IsA("TextLabel") then
                          local item = v.Text
-                         -- Check if item in want list (handling WindUI returning table of strings)
                          local found = false
                          for _, w in pairs(want) do if w == item then found = true end end
-                         
                          if found and v.Parent:FindFirstChild("SoldOut") and not v.Parent.SoldOut.Visible then
                              ReplicatedStorage.packages.Net["RE/DailyShop/Purchase"]:FireServer(v.Parent.Name)
                          end
@@ -679,7 +664,7 @@ end)
 
 WindUI:Notify({
     Title = "Hypexz V2",
-    Content = "Script Loaded with WindUI!",
+    Content = "Robust Script Loaded!",
     Icon = "check",
     Duration = 5
 })
